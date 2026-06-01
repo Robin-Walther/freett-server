@@ -322,18 +322,18 @@ function addPingCircle(imgX, imgY, color) {
 
 function animatePings() {
   const now = Date.now();
-  const DURATION = 2000;
+  const DURATION = 2500;
   pingCircles = pingCircles.filter(p => now - p.startTime < DURATION);
   ctxPing.clearRect(0, 0, canvasPing.width, canvasPing.height);
   for (const p of pingCircles) {
     const t  = (now - p.startTime) / DURATION;
     const cx = p.imgX * state.scale + state.offsetX;
     const cy = p.imgY * state.scale + state.offsetY;
-    const r  = t * 60;
+    const r  = t * 120;
     ctxPing.beginPath();
     ctxPing.arc(cx, cy, r, 0, Math.PI * 2);
     ctxPing.strokeStyle = p.color;
-    ctxPing.lineWidth = 3;
+    ctxPing.lineWidth = 5;
     ctxPing.globalAlpha = 1 - t;
     ctxPing.stroke();
     ctxPing.globalAlpha = 1;

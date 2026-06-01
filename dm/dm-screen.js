@@ -1088,20 +1088,20 @@ function addPingCircle(imgX, imgY, color) {
 
 function animatePings() {
   const now = Date.now();
-  const DURATION = 2000;
+  const DURATION = 2500;
   pingCircles = pingCircles.filter(p => now - p.startTime < DURATION);
   ctxPing.clearRect(0, 0, canvasPing.width, canvasPing.height);
 
   for (const p of pingCircles) {
     const t = (now - p.startTime) / DURATION; // 0..1
     const sc = imageToScreen(p.imgX, p.imgY);
-    const maxR = 60;
+    const maxR = 120;
     const r = t * maxR;
     const alpha = 1 - t;
     ctxPing.beginPath();
     ctxPing.arc(sc.x, sc.y, r, 0, Math.PI * 2);
     ctxPing.strokeStyle = p.color;
-    ctxPing.lineWidth = 3;
+    ctxPing.lineWidth = 5;
     ctxPing.globalAlpha = alpha;
     ctxPing.stroke();
     ctxPing.globalAlpha = 1;
