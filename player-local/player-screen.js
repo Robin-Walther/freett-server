@@ -354,10 +354,12 @@ window.electronAPI.onPingLocation(({ imgX, imgY, color }) => {
 });
 
 // View sync from DM (zoom + pan)
-window.electronAPI.onViewSync(({ offsetX, offsetY, scale }) => {
-  state.offsetX = offsetX;
-  state.offsetY = offsetY;
+window.electronAPI.onViewSync(({ imgCenterX, imgCenterY, scale }) => {
+  const W = canvasImage.width;
+  const H = canvasImage.height;
   state.scale   = scale;
+  state.offsetX = W / 2 - imgCenterX * scale;
+  state.offsetY = H / 2 - imgCenterY * scale;
   if (state.image) renderAll();
 });
 

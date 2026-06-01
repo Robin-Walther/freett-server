@@ -362,9 +362,11 @@ function sendGridToPlayer() {
 }
 
 function syncViewToPlayer() {
+  const W = canvasImage.width;
+  const H = canvasImage.height;
   window.electronAPI.sendViewSync({
-    offsetX: state.offsetX,
-    offsetY: state.offsetY,
+    imgCenterX: (W / 2 - state.offsetX) / state.scale,
+    imgCenterY: (H / 2 - state.offsetY) / state.scale,
     scale: state.scale,
   });
 }

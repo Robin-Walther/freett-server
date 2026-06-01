@@ -507,7 +507,8 @@ ipcMain.handle('remote-start', async () => {
   if (currentTunnel) { try { currentTunnel.close(); } catch {} currentTunnel = null; }
   try {
     const localtunnel = require('localtunnel');
-    currentTunnel = await localtunnel({ port: REMOTE_PORT });
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('Tunnel timeout (15s)')), 15000));
+    currentTunnel = await Promise.race([localtunnel({ port: REMOTE_PORT }), timeout]);
     currentTunnel.on('error', () => {});
     return { sessionId, url: currentTunnel.url };
   } catch (e) {
