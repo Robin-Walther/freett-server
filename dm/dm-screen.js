@@ -2013,7 +2013,7 @@ function rebuildPlayersUI() {
     removeBtn.addEventListener('click', () => removeGlobalPlayer(gp.id));
 
     item.append(tokenSlot, nameSpan);
-    const slot = activeSlot();
+    const slot = getActiveSlot();
     if (slot && !slot.combatants.find(c => c.globalPlayerId === gp.id)) {
       const readdBtn = document.createElement('button');
       readdBtn.className = 'btn btn-secondary player-readd-btn';
