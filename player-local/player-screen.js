@@ -202,9 +202,7 @@ function fitImageToView(media) {
   const H = canvasImage.height;
   const w = media.videoWidth ?? media.naturalWidth;
   const h = media.videoHeight ?? media.naturalHeight;
-  const scaleX = W / w;
-  const scaleY = H / h;
-  state.scale = isFullscreen ? Math.min(scaleX, scaleY) : Math.min(scaleX, scaleY, 1);
+  state.scale = Math.max(W / w, H / h);
   state.offsetX = (W - w * state.scale) / 2;
   state.offsetY = (H - h * state.scale) / 2;
 }
@@ -355,12 +353,17 @@ window.electronAPI.onPingLocation(({ imgX, imgY, color }) => {
 
 // View sync from DM (zoom + pan)
 window.electronAPI.onViewSync(({ imgCenterX, imgCenterY, scale }) => {
+  if (!state.image) return;
   const W = canvasImage.width;
   const H = canvasImage.height;
-  state.scale   = scale;
-  state.offsetX = W / 2 - imgCenterX * scale;
-  state.offsetY = H / 2 - imgCenterY * scale;
-  if (state.image) renderAll();
+  const w = state.image.videoWidth ?? state.image.naturalWidth;
+  const h = state.image.videoHeight ?? state.image.naturalHeight;
+  const fillScale = Math.max(W / w, H / h);
+  const effectiveScale = Math.max(scale, fillScale);
+  state.scale   = effectiveScale;
+  state.offsetX = W / 2 - imgCenterX * effectiveScale;
+  state.offsetY = H / 2 - imgCenterY * effectiveScale;
+  renderAll();
 });
 
 // Incremental fog brush stroke
