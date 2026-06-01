@@ -351,18 +351,24 @@ window.electronAPI.onPingLocation(({ imgX, imgY, color }) => {
   addPingCircle(imgX, imgY, color || '#c9a84c');
 });
 
-// View sync from DM (zoom only — always centered, no pan follow)
-window.electronAPI.onViewSync(({ scale }) => {
+// View sync from DM (zoom + pan)
+window.electronAPI.onViewSync(({ imgCenterX, imgCenterY, scale }) => {
   if (!state.image) return;
   const W = canvasImage.width;
   const H = canvasImage.height;
   const w = state.image.videoWidth ?? state.image.naturalWidth;
   const h = state.image.videoHeight ?? state.image.naturalHeight;
   const fillScale = Math.max(W / w, H / h);
-  const effectiveScale = Math.max(scale, fillScale);
-  state.scale   = effectiveScale;
-  state.offsetX = (W - w * effectiveScale) / 2;
-  state.offsetY = (H - h * effectiveScale) / 2;
+
+  if (scale >= fillScale) {
+    state.scale   = scale;
+    state.offsetX = W / 2 - imgCenterX * scale;
+    state.offsetY = H / 2 - imgCenterY * scale;
+  } else {
+    state.scale   = fillScale;
+    state.offsetX = (W - w * fillScale) / 2;
+    state.offsetY = (H - h * fillScale) / 2;
+  }
   renderAll();
 });
 
