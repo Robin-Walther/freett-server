@@ -359,10 +359,16 @@ window.electronAPI.onViewSync(({ imgCenterX, imgCenterY, scale }) => {
   const w = state.image.videoWidth ?? state.image.naturalWidth;
   const h = state.image.videoHeight ?? state.image.naturalHeight;
   const fillScale = Math.max(W / w, H / h);
-  const effectiveScale = Math.max(scale, fillScale);
-  state.scale   = effectiveScale;
-  state.offsetX = W / 2 - imgCenterX * effectiveScale;
-  state.offsetY = H / 2 - imgCenterY * effectiveScale;
+
+  if (scale >= fillScale) {
+    state.scale   = scale;
+    state.offsetX = W / 2 - imgCenterX * scale;
+    state.offsetY = H / 2 - imgCenterY * scale;
+  } else {
+    state.scale   = fillScale;
+    state.offsetX = (W - w * fillScale) / 2;
+    state.offsetY = (H - h * fillScale) / 2;
+  }
   renderAll();
 });
 
