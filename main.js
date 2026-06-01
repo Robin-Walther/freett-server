@@ -584,6 +584,11 @@ ipcMain.on('remote-push-ping', (_, { sessionId, imgX, imgY, color }) => {
   remoteIpcPush(sessionId, { type: 'ping', imgX, imgY, color });
 });
 
+// IPC: DM view sync (zoom + pan) -> forward to local player
+ipcMain.on('view-sync', (_, data) => {
+  if (playerWindow) playerWindow.webContents.send('view-sync', data);
+});
+
 // DM removes a pin → update cached state + broadcast to remote players
 ipcMain.on('remote-push-pin-remove', (_, { sessionId, pinId }) => {
   const session = remoteSessions.get(sessionId);

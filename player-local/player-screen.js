@@ -353,6 +353,14 @@ window.electronAPI.onPingLocation(({ imgX, imgY, color }) => {
   addPingCircle(imgX, imgY, color || '#c9a84c');
 });
 
+// View sync from DM (zoom + pan)
+window.electronAPI.onViewSync(({ offsetX, offsetY, scale }) => {
+  state.offsetX = offsetX;
+  state.offsetY = offsetY;
+  state.scale   = scale;
+  if (state.image) renderAll();
+});
+
 // Incremental fog brush stroke
 window.electronAPI.onFogUpdate(({ cx, cy, radius, mode }) => {
   if (!fogCtx) return;

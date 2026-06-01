@@ -96,4 +96,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // DM: listen for pin place/remove events from remote players
   onRemotePinEvent: (callback) => ipcRenderer.on('remote-pin-event', (_, data) => callback(data)),
 
+  // DM -> Main: sync view (zoom + pan) to local player
+  sendViewSync: (data) => ipcRenderer.send('view-sync', data),
+
+  // Player (local): listen for view sync from DM
+  onViewSync: (callback) => ipcRenderer.on('view-sync', (_, data) => callback(data)),
+
 });

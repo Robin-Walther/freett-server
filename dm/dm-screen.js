@@ -361,6 +361,14 @@ function sendGridToPlayer() {
   }
 }
 
+function syncViewToPlayer() {
+  window.electronAPI.sendViewSync({
+    offsetX: state.offsetX,
+    offsetY: state.offsetY,
+    scale: state.scale,
+  });
+}
+
 // ===== Fog painting =====
 function screenToImage(sx, sy) {
   return {
@@ -540,6 +548,7 @@ function switchToSlot(id) {
   dropZone.style.display = 'none';
   statusText.textContent = slot.name;
   renderAll(slot);
+  syncViewToPlayer();
   volumeSlider.value = slot.volume ?? 50;
   if (isMuted && volumeSlider.value > 0) isMuted = false;
   updateVolumeIcon();
@@ -723,6 +732,7 @@ canvasImage.addEventListener('mousemove', (e) => {
       state.offsetX = e.clientX - state.panStartX;
       state.offsetY = e.clientY - state.panStartY;
       renderAll();
+      syncViewToPlayer();
     }
     return;
   }
@@ -731,6 +741,7 @@ canvasImage.addEventListener('mousemove', (e) => {
     state.offsetX = e.clientX - state.panStartX;
     state.offsetY = e.clientY - state.panStartY;
     renderAll();
+    syncViewToPlayer();
   }
   const tokenHit = getTokenAtScreen(e.offsetX, e.offsetY);
   if (tokenHit && state.tool !== 'ruler' && state.tool !== 'calibrate') {
@@ -815,6 +826,7 @@ canvasImage.addEventListener('wheel', (e) => {
   state.scale   = Math.min(Math.max(state.scale * zoomFactor, 0.05), 10);
 
   renderAll();
+  syncViewToPlayer();
 }, { passive: false });
 
 // ===== Toolbar =====

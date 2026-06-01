@@ -71,6 +71,16 @@ let dragToken = null;
 let dragOffX  = 0;
 let dragOffY  = 0;
 
+// Pan state
+let isPanning   = false;
+let panStartX   = 0;
+let panStartY   = 0;
+
+// Touch pinch state
+let lastTouchDist = null;
+let lastTouchMidX = 0;
+let lastTouchMidY = 0;
+
 // Ruler state
 let rulerMode     = false;
 let isRuling      = false;
@@ -668,16 +678,47 @@ function onDocMouseUp() {
   onPointerUp();
 }
 
+function onDocMouseMovePan(e) {
+  if (!isPanning) return;
+  state.offsetX = e.clientX - panStartX;
+  state.offsetY = e.clientY - panStartY;
+  renderAll();
+}
+function onDocMouseUpPan() {
+  isPanning = false;
+  document.removeEventListener('mousemove', onDocMouseMovePan);
+  document.removeEventListener('mouseup',   onDocMouseUpPan);
+}
+
 canvasEvents.addEventListener('mousedown', e => {
   e.preventDefault();
+  if (e.button === 1 || e.button === 2) {
+    isPanning = true;
+    panStartX = e.clientX - state.offsetX;
+    panStartY = e.clientY - state.offsetY;
+    document.addEventListener('mousemove', onDocMouseMovePan);
+    document.addEventListener('mouseup',   onDocMouseUpPan);
+    return;
+  }
   onPointerDown(e.offsetX, e.offsetY, e.shiftKey, false);
   if (dragToken) {
     document.addEventListener('mousemove', onDocMouseMove);
     document.addEventListener('mouseup',   onDocMouseUp);
   }
 });
-canvasEvents.addEventListener('mousemove', e => { if (!dragToken) onPointerMove(e.offsetX, e.offsetY); });
-canvasEvents.addEventListener('mouseup',   () => { if (!dragToken) onPointerUp(); });
+canvasEvents.addEventListener('mousemove', e => { if (!dragToken && !isPanning) onPointerMove(e.offsetX, e.offsetY); });
+canvasEvents.addEventListener('mouseup',   () => { if (!dragToken && !isPanning) onPointerUp(); });
+canvasEvents.addEventListener('contextmenu', e => e.preventDefault());
+
+canvasEvents.addEventListener('wheel', (e) => {
+  if (!state.image && !currentVideoEl) return;
+  e.preventDefault();
+  const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+  state.offsetX = e.offsetX - (e.offsetX - state.offsetX) * zoomFactor;
+  state.offsetY = e.offsetY - (e.offsetY - state.offsetY) * zoomFactor;
+  state.scale   = Math.min(Math.max(state.scale * zoomFactor, 0.05), 10);
+  renderAll();
+}, { passive: false });
 
 // Ctrl+click: place a map pin
 canvasEvents.addEventListener('click', (e) => {
@@ -724,18 +765,44 @@ function touchCoords(e) {
 
 canvasEvents.addEventListener('touchstart', e => {
   e.preventDefault();
+  if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    lastTouchDist = Math.sqrt(dx * dx + dy * dy);
+    return;
+  }
+  lastTouchDist = null;
   const { x, y } = touchCoords(e);
   onPointerDown(x, y);
 }, { passive: false });
 
 canvasEvents.addEventListener('touchmove', e => {
   e.preventDefault();
+  if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (lastTouchDist) {
+      const rect = canvasEvents.getBoundingClientRect();
+      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+      const zoomFactor = dist / lastTouchDist;
+      state.offsetX = midX - (midX - state.offsetX) * zoomFactor;
+      state.offsetY = midY - (midY - state.offsetY) * zoomFactor;
+      state.scale   = Math.min(Math.max(state.scale * zoomFactor, 0.05), 10);
+      renderAll();
+    }
+    lastTouchDist = dist;
+    return;
+  }
+  lastTouchDist = null;
   const { x, y } = touchCoords(e);
   onPointerMove(x, y);
 }, { passive: false });
 
 canvasEvents.addEventListener('touchend', e => {
   e.preventDefault();
+  lastTouchDist = null;
   onPointerUp();
 }, { passive: false });
 
