@@ -67,6 +67,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closePlayerWindow:  () => ipcRenderer.send('close-player-window'),
   reopenPlayerWindow: () => ipcRenderer.send('reopen-player-window'),
 
+  // DM: listen for the reopened local player window finishing its initial load
+  onPlayerWindowReady: (callback) => ipcRenderer.on('player-window-ready', () => callback()),
+
   // Remote mode
   remoteStart: () => ipcRenderer.invoke('remote-start'),
   remoteEnd: (sessionId) => ipcRenderer.invoke('remote-end', sessionId),

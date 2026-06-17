@@ -124,6 +124,9 @@ ipcMain.on('reopen-player-window', () => {
     },
   });
   playerWindow.loadFile('player-local/player-screen.html');
+  playerWindow.webContents.once('did-finish-load', () => {
+    if (dmWindow) dmWindow.webContents.send('player-window-ready');
+  });
   playerWindow.on('closed', () => { playerWindow = null; });
 });
 

@@ -371,6 +371,23 @@ function syncViewToPlayer() {
   });
 }
 
+// Re-push the full current state to a freshly (re)opened local player window,
+// since it starts with no map/fog/tokens until the DM had switched slots.
+function syncFullStateToLocalPlayer() {
+  const slot = getActiveSlot();
+  if (!slot) return;
+  window.electronAPI.sendImageLoaded(slot.filePath);
+  sendFullFogUpdate();
+  sendGridToPlayer();
+  sendVolume();
+  sendTokensSync();
+  syncViewToPlayer();
+}
+
+window.electronAPI.onPlayerWindowReady(() => {
+  syncFullStateToLocalPlayer();
+});
+
 // ===== Fog painting =====
 function screenToImage(sx, sy) {
   return {

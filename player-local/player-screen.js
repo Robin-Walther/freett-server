@@ -202,7 +202,7 @@ function fitImageToView(media) {
   const H = canvasImage.height;
   const w = media.videoWidth ?? media.naturalWidth;
   const h = media.videoHeight ?? media.naturalHeight;
-  state.scale = Math.max(W / w, H / h);
+  state.scale = Math.min(W / w, H / h);
   state.offsetX = (W - w * state.scale) / 2;
   state.offsetY = (H - h * state.scale) / 2;
 }
@@ -358,16 +358,16 @@ window.electronAPI.onViewSync(({ imgCenterX, imgCenterY, scale }) => {
   const H = canvasImage.height;
   const w = state.image.videoWidth ?? state.image.naturalWidth;
   const h = state.image.videoHeight ?? state.image.naturalHeight;
-  const fillScale = Math.max(W / w, H / h);
+  const fitScale = Math.min(W / w, H / h);
 
-  if (scale >= fillScale) {
+  if (scale >= fitScale) {
     state.scale   = scale;
     state.offsetX = W / 2 - imgCenterX * scale;
     state.offsetY = H / 2 - imgCenterY * scale;
   } else {
-    state.scale   = fillScale;
-    state.offsetX = (W - w * fillScale) / 2;
-    state.offsetY = (H - h * fillScale) / 2;
+    state.scale   = fitScale;
+    state.offsetX = (W - w * fitScale) / 2;
+    state.offsetY = (H - h * fitScale) / 2;
   }
   renderAll();
 });
