@@ -32,10 +32,11 @@ Then open `http://localhost:3456`, log in with the password, and start playing. 
 
 Environment variables:
 
-| Variable      | Required | Default | Purpose                                   |
-|---------------|----------|---------|--------------------------------------------|
-| `DM_PASSWORD` | yes      | —       | Password to log in as DM                   |
-| `PORT`        | no       | `3456`  | HTTP/WebSocket port                        |
+| Variable                | Required | Default | Purpose                                                    |
+|--------------------------|----------|---------|-------------------------------------------------------------|
+| `DM_PASSWORD`             | yes      | —       | Password to log in as DM                                    |
+| `PORT`                    | no       | `3456`  | HTTP/WebSocket port                                          |
+| `YOUTUBE_INNERTUBE_KEY`   | no       | —       | Enables the in-app YouTube music search. Without it, search returns no results (everything else still works). This is **not a private credential** — it's YouTube's own public web-client key, the same one `youtube.com` embeds in every page load (view-source on any YouTube page and search for `INNERTUBE_API_KEY` to find the current value). Deliberately not hardcoded or pasted here so it doesn't read as a leaked secret to scanners. |
 
 ---
 
@@ -46,6 +47,7 @@ Environment variables:
    ```
    DM_PASSWORD=<a long random string>
    PORT=3456
+   YOUTUBE_INNERTUBE_KEY=<optional, see below>
    ```
 3. Create a systemd unit `/etc/systemd/system/freett-server.service`:
    ```ini

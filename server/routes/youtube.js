@@ -6,9 +6,13 @@ const { requireDmAuth } = require('../auth');
 
 const router = express.Router();
 
-// YouTube's internal search API — no API key needed beyond the public web-client key below.
-// Ported as-is from the original Electron main process.
+// YouTube's internal "innertube" search API. Needs YOUTUBE_INNERTUBE_KEY set to
+// YouTube's own public web-client key (see README.md) — not a private credential
+// of this project, just kept out of source so it doesn't read as a hardcoded secret.
 function youtubeSearch(query) {
+  const apiKey = process.env.YOUTUBE_INNERTUBE_KEY;
+  if (!apiKey) return Promise.reject(new Error('YOUTUBE_INNERTUBE_KEY is not set'));
+
   const body = JSON.stringify({
     context: { client: { clientName: 'WEB', clientVersion: '2.20210721.00.00' } },
     query,
@@ -16,7 +20,7 @@ function youtubeSearch(query) {
   return new Promise((resolve, reject) => {
     const req = https.request({
       hostname: 'www.youtube.com',
-      path: '/youtubei/v1/search?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8',
+      path: `/youtubei/v1/search?key=${encodeURIComponent(apiKey)}`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
     }, (res) => {
