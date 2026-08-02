@@ -1,51 +1,17 @@
 {
-    "name": "freett",
+    "name": "freett-server",
     "version": "1.0.0",
-    "description": "FreeTT – Free Virtual Tabletop with DM and Player screens",
-    "main": "main.js",
+    "description": "FreeTT Server – self-hosted, browser-based DnD Virtual Tabletop (DM + Player screens over HTTP/WebSocket)",
+    "main": "server/index.js",
     "scripts": {
-        "start": "electron .",
-        "build": "taskkill /F /IM FreeTT.exe /T 2>NUL & set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder --win --x64",
-        "build:mac": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac"
+        "start": "node server/index.js"
     },
-    "build": {
-        "appId": "com.freett.app",
-        "productName": "FreeTT",
-        "directories": {
-            "output": "dist"
-        },
-        "files": [
-            "**/*",
-            "!node_modules/.cache",
-            "!dist/**",
-            "!.vscode/**",
-            "!docs/**",
-            "!start.bat",
-            "!start.ps1",
-            "!start.sh"
-        ],
-        "icon": "assets/icon.png",
-        "win": {
-            "target": "portable",
-            "icon": "assets/icon.png"
-        },
-        "mac": {
-            "target": [
-                { "target": "dmg", "arch": ["x64", "arm64"] }
-            ],
-            "category": "public.app-category.games",
-            "icon": "assets/icon.png"
-        }
-    },
-    "keywords": ["dnd", "tabletop", "rpg", "electron", "vtt"],
+    "keywords": ["dnd", "tabletop", "rpg", "vtt", "server"],
     "author": "",
     "license": "MIT",
     "dependencies": {
-        "localtunnel": "^2.0.2",
+        "express": "^4.21.0",
+        "multer": "^2.0.0",
         "ws": "^8.18.0"
-    },
-    "devDependencies": {
-        "electron": "^33.0.0",
-        "electron-builder": "^26.8.1"
     }
 }

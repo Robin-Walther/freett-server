@@ -1,4 +1,4 @@
 node_modules/
-dist/
-.claude/
-docs/examples
+data/uploads/
+data/sessions/
+.env

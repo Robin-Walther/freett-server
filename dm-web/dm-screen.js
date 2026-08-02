@@ -3,43 +3,15 @@
 // ===== i18n shortcut =====
 function t(key, ...args) { return window.FREETT_I18N ? window.FREETT_I18N.t(key, ...args) : key; }
 
-// ===== Remote Mode =====
-let syncMode = 'local'; // 'local' | 'remote'
+// ===== Table / player access =====
+// The join code identifying the live table; fetched once at startup (server auto-creates
+// one table per process — there is no more "start/stop remote session" step, it's always live).
 let currentSessionId = null;
-let tunnelUrl = null;
-
-// Compress a loaded HTMLImageElement to a JPEG data URL for remote transfer.
-// Scales down to max 2048px on the longest side.
-function compressImageForRemote(imgEl) {
-  if (!imgEl) return null;
-  const MAX  = 2048;
-  const srcW = imgEl.naturalWidth  || imgEl.videoWidth  || 1;
-  const srcH = imgEl.naturalHeight || imgEl.videoHeight || 1;
-  const scale = Math.min(1, MAX / Math.max(srcW, srcH));
-  const cvs   = document.createElement('canvas');
-  cvs.width   = Math.round(srcW * scale);
-  cvs.height  = Math.round(srcH * scale);
-  cvs.getContext('2d').drawImage(imgEl, 0, 0, cvs.width, cvs.height);
-  return cvs.toDataURL('image/jpeg', 0.85);
-}
-
-// Export a token's image as a small PNG data URL (max 256 px) for remote transfer.
-function getTokenDataUrl(c) {
-  if (!c.tokenImg) return null;
-  const MAX  = 256;
-  const srcW = c.tokenImg.naturalWidth  || 1;
-  const srcH = c.tokenImg.naturalHeight || 1;
-  const scale = Math.min(1, MAX / Math.max(srcW, srcH));
-  const cvs   = document.createElement('canvas');
-  cvs.width   = Math.round(srcW * scale);
-  cvs.height  = Math.round(srcH * scale);
-  cvs.getContext('2d').drawImage(c.tokenImg, 0, 0, cvs.width, cvs.height);
-  return cvs.toDataURL('image/png');
-}
+window.electronAPI.getTable().then(res => { if (res?.code) { currentSessionId = res.code; } });
 
 // ===== Image/Video Deck =====
 let slotIdCounter = 0;
-const deck = []; // { id, filePath, image|video, isVideo, fogCanvas, fogCtx, name }
+const deck = []; // { id, filePath (server media URL), image|video, isVideo, fogCanvas, fogCtx, name }
 let activeSlotId = null;
 let animFrameId = null;
 
@@ -111,11 +83,8 @@ function sliderToVolume(sliderVal) {
 
 function sendVolume() {
   const vol = isMuted ? 0 : sliderToVolume(volumeSlider.value);
-  window.electronAPI.sendVolumeChange({ volume: vol, muted: isMuted });
-  window.electronAPI.sendMusicVolume({ volume: vol });
-  if (syncMode === 'remote') {
-    window.electronAPI.remotePushVolume({ sessionId: currentSessionId, value: vol, muted: isMuted });
-  }
+  window.electronAPI.musicSetVolume(vol);
+  window.electronAPI.pushVolume({ volume: vol, muted: isMuted });
 }
 
 function updateVolumeIcon() {
@@ -144,20 +113,12 @@ volumeSlider.addEventListener('input', () => {
   if (slot) slot.volume = parseInt(volumeSlider.value, 10);
 });
 
-// Player signals that video started playing -> re-send current volume to confirm correct level
-window.electronAPI.onVideoReady(() => {
-  sendVolume();
-});
-
 // ===== Music =====
 function playMusicForSlot(slot) {
   if (slot?.musicVideoId) {
-    window.electronAPI.sendMusicPlay({
-      videoId: slot.musicVideoId,
-      volume: isMuted ? 0 : sliderToVolume(volumeSlider.value),
-    });
+    window.electronAPI.musicPlay(slot.musicVideoId, isMuted ? 0 : sliderToVolume(volumeSlider.value));
   } else {
-    window.electronAPI.sendMusicStop();
+    window.electronAPI.musicStop();
   }
   updateMusicNowPlaying();
 }
@@ -197,10 +158,7 @@ function selectMusic(videoId, title) {
   if (!slot) return;
   slot.musicVideoId = videoId;
   slot.musicTitle = title;
-  window.electronAPI.sendMusicPlay({
-    videoId,
-    volume: isMuted ? 0 : sliderToVolume(volumeSlider.value),
-  });
+  window.electronAPI.musicPlay(videoId, isMuted ? 0 : sliderToVolume(volumeSlider.value));
   updateMusicNowPlaying();
   rebuildDeckUI();
 }
@@ -212,7 +170,7 @@ musicSearchInput.addEventListener('keydown', e => {
 musicStopBtn.addEventListener('click', () => {
   const slot = getActiveSlot();
   if (slot) { slot.musicVideoId = null; slot.musicTitle = null; }
-  window.electronAPI.sendMusicStop();
+  window.electronAPI.musicStop();
   updateMusicNowPlaying();
   rebuildDeckUI();
 });
@@ -336,14 +294,7 @@ function sendFullFogUpdate() {
   const slot = getActiveSlot();
   if (!slot) return;
   const dataUrl = slot.fogCanvas.toDataURL('image/png');
-  window.electronAPI.sendFogReset({ dataUrl, width: slot.fogCanvas.width, height: slot.fogCanvas.height });
-  if (syncMode === 'remote') {
-    window.electronAPI.remotePushFog({ sessionId: currentSessionId, dataUrl, width: slot.fogCanvas.width, height: slot.fogCanvas.height });
-  }
-}
-
-function sendFogPatch(cx, cy, radius, mode) {
-  window.electronAPI.sendFogUpdate({ cx, cy, radius, mode });
+  window.electronAPI.pushFog({ dataUrl, width: slot.fogCanvas.width, height: slot.fogCanvas.height });
 }
 
 function sendGridToPlayer() {
@@ -355,38 +306,18 @@ function sendGridToPlayer() {
     gridOffsetY: slot?.gridOffsetY ?? 0,
     gridOpacity: slot?.gridOpacity ?? 15,
   };
-  window.electronAPI.sendGridUpdate(data);
-  if (syncMode === 'remote') {
-    window.electronAPI.remotePushGrid({ sessionId: currentSessionId, ...data });
-  }
+  window.electronAPI.pushGrid(data);
 }
 
 function syncViewToPlayer() {
   const W = canvasImage.width;
   const H = canvasImage.height;
-  window.electronAPI.sendViewSync({
+  window.electronAPI.pushView({
     imgCenterX: (W / 2 - state.offsetX) / state.scale,
     imgCenterY: (H / 2 - state.offsetY) / state.scale,
     scale: state.scale,
   });
 }
-
-// Re-push the full current state to a freshly (re)opened local player window,
-// since it starts with no map/fog/tokens until the DM had switched slots.
-function syncFullStateToLocalPlayer() {
-  const slot = getActiveSlot();
-  if (!slot) return;
-  window.electronAPI.sendImageLoaded(slot.filePath);
-  sendFullFogUpdate();
-  sendGridToPlayer();
-  sendVolume();
-  sendTokensSync();
-  syncViewToPlayer();
-}
-
-window.electronAPI.onPlayerWindowReady(() => {
-  syncFullStateToLocalPlayer();
-});
 
 // ===== Fog painting =====
 function screenToImage(sx, sy) {
@@ -417,7 +348,6 @@ function paintFog(screenX, screenY) {
   slot.fogCtx.globalCompositeOperation = 'source-over';
 
   renderAll(slot);
-  sendFogPatch(x, y, r, state.tool);
 }
 
 // ===== Cursor preview =====
@@ -515,16 +445,15 @@ function fitImageToView(slot) {
 }
 
 // ===== Deck management =====
-function addMediaToDeck(filePath) {
-  const name = filePath.split(/[\\/]/).pop();
-  const src = `file:///${filePath.replace(/\\/g, '/')}`;
-  const isVideo = /\.(mp4|webm|ogg|mov)$/i.test(filePath);
+// fileRef: { url, name, isVideo } — as returned by the upload endpoint (see api.js).
+function addMediaToDeck(fileRef) {
+  const { url: filePath, name, isVideo } = fileRef;
 
   if (isVideo) {
     const video = document.createElement('video');
     video.loop = true;
     video.muted = true;
-    video.src = src;
+    video.src = filePath;
     video.addEventListener('loadeddata', () => {
       const { fogCanvas, fogCtx } = makeFog(video.videoWidth, video.videoHeight);
       const slot = { id: ++slotIdCounter, filePath, video, isVideo: true, fogCanvas, fogCtx, name, musicVideoId: null, musicTitle: null, volume: parseInt(volumeSlider.value, 10), combatants: [], pins: [], gridSize: null, gridOffsetX: 0, gridOffsetY: 0, gridVisible: false, gridOpacity: 15 };
@@ -538,7 +467,7 @@ function addMediaToDeck(filePath) {
     });
   } else {
     const img = new Image();
-    img.src = src;
+    img.src = filePath;
     img.onload = () => {
       const { fogCanvas, fogCtx } = makeFog(img.naturalWidth, img.naturalHeight);
       const slot = { id: ++slotIdCounter, filePath, image: img, isVideo: false, fogCanvas, fogCtx, name, musicVideoId: null, musicTitle: null, volume: parseInt(volumeSlider.value, 10), combatants: [], pins: [], gridSize: null, gridOffsetX: 0, gridOffsetY: 0, gridVisible: false, gridOpacity: 15 };
@@ -572,19 +501,9 @@ function switchToSlot(id) {
   if (isMuted && volumeSlider.value > 0) isMuted = false;
   updateVolumeIcon();
   sendVolume();
-  window.electronAPI.sendImageLoaded(slot.filePath);
+  window.electronAPI.pushMap({ url: slot.filePath, isVideo: slot.isVideo, name: slot.name });
   sendFullFogUpdate();
   sendGridToPlayer();
-  if (syncMode === 'remote') {
-    if (slot.isVideo) {
-      window.electronAPI.remoteRegisterMedia(slot.filePath).then(mediaUrl => {
-        window.electronAPI.remotePushMap({ sessionId: currentSessionId, videoUrl: mediaUrl, name: slot.name });
-      });
-    } else {
-      const imgData = compressImageForRemote(slot.image);
-      if (imgData) window.electronAPI.remotePushMap({ sessionId: currentSessionId, imageData: imgData, name: slot.name });
-    }
-  }
   rebuildDeckUI();
   rebuildCombatUI();
   playMusicForSlot(slot);
@@ -597,6 +516,7 @@ function switchToSlot(id) {
   }
 
   sendTokensSync();
+  window.electronAPI.pushPins(slot.pins || []);
 }
 
 function removeFromDeck(id) {
@@ -615,7 +535,7 @@ function removeFromDeck(id) {
       ctxFog.clearRect(0, 0, canvasFog.width, canvasFog.height);
       dropZone.style.display = 'flex';
       statusText.textContent = t('status.no_image');
-      window.electronAPI.sendMusicStop();
+      window.electronAPI.musicStop();
       updateMusicNowPlaying();
       rebuildCombatUI();
       updateGridPanel();
@@ -690,6 +610,15 @@ canvasImage.addEventListener('mousedown', (e) => {
     if (slot) {
       const imgPos = screenToImage(e.offsetX, e.offsetY);
       sendDMPing(imgPos.x, imgPos.y);
+    }
+    return;
+  }
+  // Ctrl/Cmd+left-click: place a map pin with a note
+  if (e.button === 0 && (e.ctrlKey || e.metaKey)) {
+    const slot = getActiveSlot();
+    if (slot) {
+      const imgPos = screenToImage(e.offsetX, e.offsetY);
+      openPinNoteModal(imgPos.x, imgPos.y);
     }
     return;
   }
@@ -930,9 +859,11 @@ container.addEventListener('drop', (e) => {
     return;
   }
 
-  Array.from(e.dataTransfer.files)
-    .filter(f => /\.(jpe?g|png|webp|gif|mp4|webm|ogg|mov)$/i.test(f.name))
-    .forEach(f => addMediaToDeck(f.path));
+  const droppedFiles = Array.from(e.dataTransfer.files)
+    .filter(f => /\.(jpe?g|png|webp|gif|mp4|webm|ogg|mov)$/i.test(f.name));
+  if (droppedFiles.length > 0) {
+    window.electronAPI.uploadFiles(droppedFiles).then(refs => refs.forEach(addMediaToDeck));
+  }
 });
 
 // ===== Token Context Menu =====
@@ -1145,19 +1076,57 @@ function getPinAtScreen(sx, sy) {
   return null;
 }
 
+let pendingPinCoords = null;
+
+function openPinNoteModal(imgX, imgY) {
+  const modal = document.getElementById('pin-note-modal');
+  const input = document.getElementById('pin-note-input');
+  if (!modal || !input) return;
+  pendingPinCoords = { x: imgX, y: imgY };
+  input.value = '';
+  modal.style.display = '';
+  input.focus();
+}
+
+function closePinNoteModal() {
+  const modal = document.getElementById('pin-note-modal');
+  if (modal) modal.style.display = 'none';
+  pendingPinCoords = null;
+}
+
+function confirmPinNoteModal() {
+  if (!pendingPinCoords) return;
+  const input = document.getElementById('pin-note-input');
+  const text = input ? input.value.trim() : '';
+  addPinFromDM(pendingPinCoords.x, pendingPinCoords.y, text);
+  closePinNoteModal();
+}
+
+function addPinFromDM(imgX, imgY, text) {
+  const slot = getActiveSlot();
+  if (!slot) return;
+  if (!slot.pins) slot.pins = [];
+  const pin = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+    playerId: 'dm',
+    colorHex: DM_PING_COLOR,
+    imgX, imgY, text,
+  };
+  slot.pins.push(pin);
+  renderAll();
+  window.electronAPI.pushPin(pin);
+}
+
 function removePinFromDM(pinId) {
   const slot = getActiveSlot();
   if (!slot || !slot.pins) return;
   slot.pins = slot.pins.filter(p => p.id !== pinId);
   renderAll();
-  if (syncMode === 'remote' && currentSessionId) {
-    window.electronAPI.remotePushPinRemove({ sessionId: currentSessionId, pinId });
-  }
+  window.electronAPI.pushPinRemove(pinId);
 }
 
-// DM receives pin events from remote players
+// DM receives pin events from players
 window.electronAPI.onRemotePinEvent(({ action, pin, pinId }) => {
-  if (syncMode !== 'remote') return;
   const slot = getActiveSlot();
   if (!slot) return;
   if (!slot.pins) slot.pins = [];
@@ -1169,46 +1138,26 @@ window.electronAPI.onRemotePinEvent(({ action, pin, pinId }) => {
   renderAll();
 });
 
-// DM receives player-ping from remote player
+// DM receives player-ping from a player
 window.electronAPI.onRemotePlayerPing(({ playerId, imgX, imgY, color }) => {
-  if (syncMode !== 'remote') return;
   addPingCircle(imgX, imgY, color);
 });
 
 function sendTokensSync() {
   const slot = getActiveSlot();
-
-  // Local IPC: player-screen.js uses tokenPath for file:// image loading
-  const localTokens = !slot ? [] : slot.combatants
-    .filter(c => c.tokenX != null && c.tokenY != null && c.tokenPath)
+  const tokens = !slot ? [] : slot.combatants
+    .filter(c => c.tokenX != null && c.tokenY != null)
     .map(c => {
       const gp = c.globalPlayerId ? globalPlayers.find(p => p.id === c.globalPlayerId) : null;
       return {
         id: c.id, name: c.name, type: c.type,
-        tokenPath: c.tokenPath,
+        tokenUrl: c.tokenPath || null,
         tokenX: c.tokenX, tokenY: c.tokenY,
         tokenSize: c.tokenSize || 40,
         controllerId: gp?.uuid ?? null,
       };
     });
-  window.electronAPI.sendTokensSync(localTokens);
-
-  if (syncMode === 'remote') {
-    // Remote: embed compressed token images as data URLs (no Storage needed)
-    const remoteTokens = !slot ? [] : slot.combatants
-      .filter(c => c.tokenX != null && c.tokenY != null)
-      .map(c => {
-        const gp = c.globalPlayerId ? globalPlayers.find(p => p.id === c.globalPlayerId) : null;
-        return {
-          id: c.id, name: c.name, type: c.type,
-          tokenData: getTokenDataUrl(c),
-          tokenX: c.tokenX, tokenY: c.tokenY,
-          tokenSize: c.tokenSize || 40,
-          controllerId: gp?.uuid ?? null,
-        };
-      });
-    window.electronAPI.remotePushTokens({ sessionId: currentSessionId, tokens: remoteTokens });
-  }
+  window.electronAPI.pushTokens(tokens);
 }
 
 // ===== Copy Combatant to Scene =====
@@ -1245,7 +1194,7 @@ function copyCombatantToSlot(combatant, targetSlot) {
   };
   if (copy.tokenPath) {
     const img = new Image();
-    img.src = `file:///${copy.tokenPath.replace(/\\/g, '/')}`;
+    img.src = copy.tokenPath;
     img.onload = () => { copy.tokenImg = img; if (targetSlot.id === activeSlotId) { rebuildCombatUI(); renderAll(targetSlot); } };
   }
   targetSlot.combatants.push(copy);
@@ -1298,14 +1247,14 @@ function showCopyMenu(combatant, buttonEl) {
 }
 
 async function openTokenDialog(combatant) {
-  const filePaths = await window.electronAPI.openFileDialog();
-  if (!filePaths || filePaths.length === 0) return;
-  const fp = filePaths.find(f => /\.(jpe?g|png|webp|gif)$/i.test(f));
+  const fileRefs = await window.electronAPI.openFileDialog({ accept: 'image/*', multiple: false });
+  if (!fileRefs || fileRefs.length === 0) return;
+  const fp = fileRefs.find(f => /\.(jpe?g|png|webp|gif)$/i.test(f.name));
   if (!fp) return;
   const img = new Image();
-  img.src = `file:///${fp.replace(/\\/g, '/')}`;
+  img.src = fp.url;
   img.onload = () => {
-    combatant.tokenPath = fp;
+    combatant.tokenPath = fp.url;
     combatant.tokenImg = img;
     rebuildCombatUI();
     renderAll();
@@ -1382,7 +1331,7 @@ function rebuildCombatUI() {
     if (c.tokenImg) {
       const thumb = document.createElement('img');
       thumb.className = 'combat-token-img' + (c.tokenX != null ? ' token-on-map' : '');
-      thumb.src = `file:///${c.tokenPath.replace(/\\/g, '/')}`;
+      thumb.src = c.tokenPath;
       thumb.draggable = true;
       thumb.title = c.tokenX != null
         ? t('combat.token.title.placed')
@@ -1624,7 +1573,7 @@ function clearDeck() {
   ctxFog.clearRect(0, 0, canvasFog.width, canvasFog.height);
   dropZone.style.display = 'flex';
   statusText.textContent = t('status.no_image');
-  window.electronAPI.sendMusicStop();
+  window.electronAPI.musicStop();
   updateMusicNowPlaying();
   rebuildDeckUI();
   rebuildCombatUI();
@@ -1645,7 +1594,7 @@ function restoreFog(slot, fogDataUrl, fogWidth, fogHeight) {
 
 function addSessionSlot(savedSlot, onReady) {
   const { filePath, name, isVideo, volume, musicVideoId, musicTitle, fogDataUrl, fogWidth, fogHeight, combatants } = savedSlot;
-  const src = `file:///${filePath.replace(/\\/g, '/')}`;
+  const src = filePath;
 
   function finalize(slot) {
     slot.musicVideoId = musicVideoId;
@@ -1671,7 +1620,7 @@ function addSessionSlot(savedSlot, onReady) {
     for (const c of slot.combatants) {
       if (c.tokenPath) {
         const img = new Image();
-        img.src = `file:///${c.tokenPath.replace(/\\/g, '/')}`;
+        img.src = c.tokenPath;
         img.onload = () => { c.tokenImg = img; rebuildCombatUI(); renderAll(slot); };
       }
     }
@@ -1721,7 +1670,7 @@ async function loadSession() {
       globalPlayers.push(gp);
       if (gp.tokenPath) {
         const img = new Image();
-        img.src = `file:///${gp.tokenPath.replace(/\\/g, '/')}`;
+        img.src = gp.tokenPath;
         img.onload = () => { gp.tokenImg = img; rebuildPlayersUI(); };
       }
     }
@@ -1986,13 +1935,13 @@ function updateGlobalPlayerToken(gpId, tokenPath, tokenImg) {
 }
 
 async function openGlobalPlayerTokenDialog(gp) {
-  const filePaths = await window.electronAPI.openFileDialog();
-  if (!filePaths || filePaths.length === 0) return;
-  const fp = filePaths.find(f => /\.(jpe?g|png|webp|gif)$/i.test(f));
+  const fileRefs = await window.electronAPI.openFileDialog({ accept: 'image/*', multiple: false });
+  if (!fileRefs || fileRefs.length === 0) return;
+  const fp = fileRefs.find(f => /\.(jpe?g|png|webp|gif)$/i.test(f.name));
   if (!fp) return;
   const img = new Image();
-  img.src = `file:///${fp.replace(/\\/g, '/')}`;
-  img.onload = () => updateGlobalPlayerToken(gp.id, fp, img);
+  img.src = fp.url;
+  img.onload = () => updateGlobalPlayerToken(gp.id, fp.url, img);
 }
 
 function rebuildPlayersUI() {
@@ -2007,7 +1956,7 @@ function rebuildPlayersUI() {
     if (gp.tokenImg) {
       const thumb = document.createElement('img');
       thumb.className = 'combat-token-img';
-      thumb.src = `file:///${gp.tokenPath.replace(/\\/g, '/')}`;
+      thumb.src = gp.tokenPath;
       thumb.draggable = false;
       thumb.title = t('player.token.title');
       thumb.addEventListener('click', () => openGlobalPlayerTokenDialog(gp));
@@ -2047,14 +1996,14 @@ function rebuildPlayersUI() {
       });
       item.appendChild(readdBtn);
     }
-    if (syncMode === 'remote' && currentSessionId && gp.uuid) {
+    if (currentSessionId && gp.uuid) {
       const linkBtn = document.createElement('button');
       linkBtn.className = 'btn btn-secondary player-link-btn';
       linkBtn.textContent = '🔗';
       linkBtn.title = t('player.copy_link.title');
       linkBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const link = `${tunnelUrl || ''}?session=${currentSessionId}&player=${gp.uuid}`;
+        const link = getPlayerLink(gp.uuid);
         navigator.clipboard.writeText(link)
           .then(() => { linkBtn.textContent = '✓'; setTimeout(() => { linkBtn.textContent = '🔗'; }, 2000); })
           .catch(console.error);
@@ -2115,42 +2064,20 @@ function rebuildPlayersUI() {
   });
 })();
 
-// ===== Remote Mode =====
+// ===== Player Access (join code + links) =====
 
 function getPlayerLink(playerUuid) {
-  return `${tunnelUrl || ''}?session=${currentSessionId}&player=${playerUuid}`;
+  return `${location.origin}/play/?session=${currentSessionId}&player=${playerUuid}`;
 }
 
 function getSessionLink() {
-  return `${tunnelUrl || ''}?session=${currentSessionId}`;
+  return `${location.origin}/play/?session=${currentSessionId}`;
 }
 
 function updateRemotePanel() {
-  const inactive = document.getElementById('remote-panel-inactive');
-  const active   = document.getElementById('remote-panel-active');
-  const codeEl   = document.getElementById('remote-session-code');
-  const startBtn = document.getElementById('btn-start-remote');
-  const toggle   = document.getElementById('remote-mode-toggle');
-  const infoBtn  = document.getElementById('btn-remote-info');
-
-  if (syncMode === 'remote' && currentSessionId) {
-    inactive.style.display = 'none';
-    active.style.display   = '';
-    codeEl.textContent     = currentSessionId;
-    rebuildRemotePlayerLinks();
-    toggle.checked         = true;
-    toggle.disabled        = false;
-    infoBtn.style.display  = '';
-  } else {
-    inactive.style.display = '';
-    active.style.display   = 'none';
-    startBtn.disabled      = false;
-    startBtn.textContent   = t('btn.start_remote');
-    toggle.checked         = false;
-    toggle.disabled        = false;
-    infoBtn.style.display  = 'none';
-  }
-
+  const codeEl = document.getElementById('remote-session-code');
+  codeEl.textContent = currentSessionId || '…';
+  rebuildRemotePlayerLinks();
   rebuildPlayersUI();
 }
 
@@ -2196,58 +2123,11 @@ function rebuildRemotePlayerLinks() {
   }
 }
 
-async function startRemoteSession() {
-  const btn = document.getElementById('btn-start-remote');
-  btn.disabled    = true;
-  btn.textContent = t('btn.start_remote.starting');
-  try {
-    const result = await window.electronAPI.remoteStart();
-    currentSessionId = result.sessionId;
-    tunnelUrl        = result.url;
-    syncMode         = 'remote';
-
-    // Push current state if a map is loaded
-    const slot = getActiveSlot();
-    if (slot) {
-      if (slot.isVideo) {
-        const mediaUrl = await window.electronAPI.remoteRegisterMedia(slot.filePath);
-        window.electronAPI.remotePushMap({ sessionId: currentSessionId, videoUrl: mediaUrl, name: slot.name });
-      } else {
-        const imgData = compressImageForRemote(slot.image);
-        if (imgData) window.electronAPI.remotePushMap({ sessionId: currentSessionId, imageData: imgData, name: slot.name });
-      }
-      sendFullFogUpdate();
-      sendGridToPlayer();
-      sendTokensSync();
-      sendVolume();
-    }
-
-    updateRemotePanel();
-  } catch (e) {
-    console.error('[Remote] Start failed:', e);
-    alert(t('remote.start_error') + e.message);
-    btn.disabled    = false;
-    btn.textContent = t('btn.start_remote');
-    updateRemotePanel(); // reset toggle on failure
-  }
-}
-
-async function endRemoteSession() {
-  await window.electronAPI.remoteEnd(currentSessionId);
-  syncMode         = 'local';
-  currentSessionId = null;
-  tunnelUrl        = null;
-  updateRemotePanel();
-}
-
 const DM_PING_COLOR = '#c9a84c';
 
 function sendDMPing(imgX, imgY) {
   addPingCircle(imgX, imgY, DM_PING_COLOR);
-  window.electronAPI.sendPingLocation({ imgX, imgY, color: DM_PING_COLOR });
-  if (syncMode === 'remote' && currentSessionId) {
-    window.electronAPI.remotePushPing({ sessionId: currentSessionId, imgX, imgY, color: DM_PING_COLOR });
-  }
+  window.electronAPI.pushPing({ imgX, imgY, color: DM_PING_COLOR });
 }
 
 // Ping button: DM pings at center of current map view
@@ -2258,9 +2138,8 @@ document.getElementById('btn-ping-players').addEventListener('click', () => {
   sendDMPing(centerImg.x, centerImg.y);
 });
 
-// Listen for token moves from remote players (registered once at startup)
+// Listen for token moves from players (registered once at startup)
 window.electronAPI.onRemoteTokenMoved(({ tokenId, tokenX, tokenY }) => {
-  if (syncMode !== 'remote') return;
   for (const s of deck) {
     const c = s.combatants.find(x => x.id === tokenId);
     if (c) {
@@ -2273,25 +2152,7 @@ window.electronAPI.onRemoteTokenMoved(({ tokenId, tokenX, tokenY }) => {
   }
 });
 
-// Remote mode toggle slider
-document.getElementById('remote-mode-toggle').addEventListener('change', async (e) => {
-  const toggle = e.target;
-  if (toggle.checked) {
-    toggle.disabled = true;
-    await startRemoteSession();
-    if (syncMode === 'remote') {
-      window.electronAPI.closePlayerWindow();
-    }
-  } else {
-    if (syncMode === 'remote') {
-      await endRemoteSession();
-      window.electronAPI.reopenPlayerWindow();
-    }
-    document.getElementById('remote-panel').style.display = 'none';
-  }
-});
-
-// Info button: open/close connection details panel (only visible in remote mode)
+// Info button: open/close player-links panel
 document.getElementById('btn-remote-info').addEventListener('click', () => {
   const panel   = document.getElementById('remote-panel');
   const showing = panel.style.display !== 'none';
@@ -2303,16 +2164,12 @@ document.getElementById('remote-panel-close').addEventListener('click', () => {
   document.getElementById('remote-panel').style.display = 'none';
 });
 
-document.getElementById('btn-start-remote').addEventListener('click', async () => {
-  await startRemoteSession();
-  if (syncMode === 'remote') window.electronAPI.closePlayerWindow();
-});
-
+// "Regenerate code": kicks all connected players; only the new link works afterwards.
 document.getElementById('btn-end-remote').addEventListener('click', async () => {
-  if (confirm(t('remote.end.confirm'))) {
-    await endRemoteSession();
-    window.electronAPI.reopenPlayerWindow();
-    document.getElementById('remote-panel').style.display = 'none';
+  if (confirm(t('remote.regenerate.confirm'))) {
+    const result = await window.electronAPI.regenerateTable();
+    currentSessionId = result.code;
+    updateRemotePanel();
   }
 });
 
@@ -2325,6 +2182,10 @@ document.getElementById('btn-copy-session-link').addEventListener('click', () =>
       setTimeout(() => { btn.textContent = '📋'; }, 2000);
     })
     .catch(console.error);
+});
+
+document.getElementById('btn-logout').addEventListener('click', () => {
+  window.electronAPI.logout();
 });
 
 // ===== i18n + Language Switcher + Help Button =====
@@ -2361,5 +2222,22 @@ document.getElementById('btn-copy-session-link').addEventListener('click', () =>
     helpClose.addEventListener('click', () => { helpModal.style.display = 'none'; });
     helpModal.querySelector('.help-modal-backdrop').addEventListener('click', () => { helpModal.style.display = 'none'; });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && helpModal.style.display !== 'none') helpModal.style.display = 'none'; });
+  }
+
+  // Pin note modal
+  const pinNoteModal = document.getElementById('pin-note-modal');
+  const pinNoteInput = document.getElementById('pin-note-input');
+  const pinNoteOk    = document.getElementById('pin-note-ok');
+  const pinNoteCancel = document.getElementById('pin-note-cancel');
+  const pinNoteClose  = document.getElementById('pin-note-close');
+  if (pinNoteModal) {
+    pinNoteOk.addEventListener('click', () => confirmPinNoteModal());
+    pinNoteCancel.addEventListener('click', () => closePinNoteModal());
+    pinNoteClose.addEventListener('click', () => closePinNoteModal());
+    pinNoteModal.querySelector('.help-modal-backdrop').addEventListener('click', () => closePinNoteModal());
+    pinNoteInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') confirmPinNoteModal();
+      else if (e.key === 'Escape') closePinNoteModal();
+    });
   }
 })();

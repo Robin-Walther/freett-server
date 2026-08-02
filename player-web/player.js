@@ -36,6 +36,7 @@ const statusEl      = document.getElementById('connection-status');
 const rulerBtn      = document.getElementById('ruler-btn');
 const pingBtn       = document.getElementById('ping-btn');
 const fullscreenBtn = document.getElementById('fullscreen-btn');
+const followDmBtn   = document.getElementById('follow-dm-btn');
 
 // === State ===
 const state = {
@@ -76,6 +77,45 @@ let isPanning   = false;
 let panStartX   = 0;
 let panStartY   = 0;
 
+// "Follow DM" camera — on by default (matches the old second-monitor screen behavior),
+// disabled the moment the player manually pans/zooms, re-enabled via followDmBtn.
+let followDM = true;
+let dmView   = null; // { imgCenterX, imgCenterY, scale } — last camera pushed by the DM
+
+function setFollowDM(value) {
+  followDM = value;
+  if (followDmBtn) followDmBtn.style.display = followDM ? 'none' : '';
+  if (followDM) applyFollowView();
+}
+
+function applyFollowView() {
+  const media = currentVideoEl || state.image;
+  if (!media || !dmView) return;
+  const W = canvasImage.width;
+  const H = canvasImage.height;
+  const w = media instanceof HTMLVideoElement ? media.videoWidth  : media.naturalWidth;
+  const h = media instanceof HTMLVideoElement ? media.videoHeight : media.naturalHeight;
+  const fitScale = Math.min(W / w, H / h);
+
+  if (dmView.scale >= fitScale) {
+    state.scale   = dmView.scale;
+    state.offsetX = W / 2 - dmView.imgCenterX * dmView.scale;
+    state.offsetY = H / 2 - dmView.imgCenterY * dmView.scale;
+  } else {
+    state.scale   = fitScale;
+    state.offsetX = (W - w * fitScale) / 2;
+    state.offsetY = (H - h * fitScale) / 2;
+  }
+  renderAll();
+}
+
+function applyDmView(imgCenterX, imgCenterY, scale) {
+  dmView = { imgCenterX, imgCenterY, scale };
+  if (followDM) applyFollowView();
+}
+
+followDmBtn?.addEventListener('click', () => setFollowDM(true));
+
 // Touch pinch state
 let lastTouchDist = null;
 let lastTouchMidX = 0;
@@ -89,7 +129,7 @@ let rulerStartY   = 0;
 let rulerCurrentX = 0;
 let rulerCurrentY = 0;
 
-// Token image cache: id -> { data: dataUrl, img: HTMLImageElement }
+// Token image cache: id -> { url, img: HTMLImageElement }
 const tokenImgCache = new Map();
 
 // Map pins
@@ -388,7 +428,7 @@ function connect() {
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
 
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${proto}//${location.host}${location.search}`);
+  ws = new WebSocket(`${proto}//${location.host}/ws/player${location.search}`);
 
   ws.onopen = () => {
     statusEl.textContent = t('player.connected');
@@ -426,8 +466,10 @@ function connect() {
 function handleMessage(msg) {
   switch (msg.type) {
     case 'map':
-      if (msg.videoUrl) loadVideoMap(msg.videoUrl);
-      else loadMapFromData(msg.imageData);
+      loadMap(msg.url, !!msg.isVideo);
+      break;
+    case 'view':
+      applyDmView(msg.imgCenterX, msg.imgCenterY, msg.scale);
       break;
     case 'fog':
       applyFog(msg.dataUrl, msg.width, msg.height);
@@ -482,47 +524,50 @@ function handleMessage(msg) {
 }
 
 // === Map / Fog / Token loading ===
-function loadMapFromData(imageData) {
+// The server hosts the actual file (uploaded by the DM), so the player just loads it
+// by URL — no more DM-side compression/embedding of image bytes over the WebSocket.
+function loadMap(url, isVideo) {
   stopVideoLoop();
   pins = [];
   if (currentVideoEl) { currentVideoEl.pause(); currentVideoEl.src = ''; currentVideoEl = null; }
-  const img = new Image();
-  img.onload = () => {
-    state.image = img;
-    fitImageToView(img);
-    waitingScreen.style.display = 'none';
-    renderAll();
-  };
-  img.onerror = () => { waitingDetail.textContent = t('player.map_error'); };
-  img.src = imageData;
-}
-
-function loadVideoMap(url) {
-  stopVideoLoop();
-  if (currentVideoEl) { currentVideoEl.pause(); currentVideoEl.src = ''; currentVideoEl = null; }
   state.image = null;
+  // Discard any camera pushed for the previous map — its coordinates don't apply here.
+  dmView = null;
+  setFollowDM(true);
 
-  const video = document.createElement('video');
-  video.loop   = true;
-  video.muted  = false;
-  video.volume = currentVolume;
-  video.src    = url;
+  if (isVideo) {
+    const video = document.createElement('video');
+    video.loop   = true;
+    video.muted  = false;
+    video.volume = currentVolume;
+    video.src    = url;
 
-  video.addEventListener('loadedmetadata', () => {
-    currentVideoEl = video;
-    fitImageToView(video);
-    waitingScreen.style.display = 'none';
-    video.play().catch(() => {
-      // Browser blocked unmuted autoplay – retry muted
-      video.muted = true;
-      video.play().catch(() => {});
-    });
-    startVideoLoop();
-  }, { once: true });
+    video.addEventListener('loadedmetadata', () => {
+      currentVideoEl = video;
+      fitImageToView(video);
+      waitingScreen.style.display = 'none';
+      video.play().catch(() => {
+        // Browser blocked unmuted autoplay – retry muted
+        video.muted = true;
+        video.play().catch(() => {});
+      });
+      startVideoLoop();
+    }, { once: true });
 
-  video.addEventListener('error', () => {
-    waitingDetail.textContent = t('player.video_error');
-  }, { once: true });
+    video.addEventListener('error', () => {
+      waitingDetail.textContent = t('player.video_error');
+    }, { once: true });
+  } else {
+    const img = new Image();
+    img.onload = () => {
+      state.image = img;
+      fitImageToView(img);
+      waitingScreen.style.display = 'none';
+      renderAll();
+    };
+    img.onerror = () => { waitingDetail.textContent = t('player.map_error'); };
+    img.src = url;
+  }
 }
 
 function applyFog(dataUrl, width, height) {
@@ -546,7 +591,7 @@ function applyTokens(raw) {
     const cached = tokenImgCache.get(t.id);
     return {
       ...t,
-      tokenImg: (cached && cached.data === t.tokenData) ? cached.img : null,
+      tokenImg: (cached && cached.url === t.tokenUrl) ? cached.img : null,
     };
   });
 
@@ -561,14 +606,14 @@ function applyTokens(raw) {
   }
 
   for (const t of newTokens) {
-    if (!t.tokenImg && t.tokenData) {
+    if (!t.tokenImg && t.tokenUrl) {
       const img = new Image();
       img.onload = () => {
-        tokenImgCache.set(t.id, { data: t.tokenData, img });
+        tokenImgCache.set(t.id, { url: t.tokenUrl, img });
         const tok = tokens.find(x => x.id === t.id);
         if (tok) { tok.tokenImg = img; renderAll(); }
       };
-      img.src = t.tokenData;
+      img.src = t.tokenUrl;
     }
   }
 
@@ -693,6 +738,7 @@ function onDocMouseUpPan() {
 canvasEvents.addEventListener('mousedown', e => {
   e.preventDefault();
   if (e.button === 1 || e.button === 2) {
+    setFollowDM(false);
     isPanning = true;
     panStartX = e.clientX - state.offsetX;
     panStartY = e.clientY - state.offsetY;
@@ -713,6 +759,7 @@ canvasEvents.addEventListener('contextmenu', e => e.preventDefault());
 canvasEvents.addEventListener('wheel', (e) => {
   if (!state.image && !currentVideoEl) return;
   e.preventDefault();
+  setFollowDM(false);
   const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
   state.offsetX = e.offsetX - (e.offsetX - state.offsetX) * zoomFactor;
   state.offsetY = e.offsetY - (e.offsetY - state.offsetY) * zoomFactor;
@@ -766,6 +813,7 @@ function touchCoords(e) {
 canvasEvents.addEventListener('touchstart', e => {
   e.preventDefault();
   if (e.touches.length === 2) {
+    setFollowDM(false);
     const dx = e.touches[0].clientX - e.touches[1].clientX;
     const dy = e.touches[0].clientY - e.touches[1].clientY;
     lastTouchDist = Math.sqrt(dx * dx + dy * dy);

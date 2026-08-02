@@ -163,6 +163,7 @@ const TRANSLATIONS = {
     'prompt.comment': 'Comment (optional):',
     'player.ruler.title': 'Toggle ruler',
     'player.ping.title': 'Ping — alert DM to a location (Shift+click on map)',
+    'player.follow_dm.title': 'Return to DM view',
     'player.fullscreen.title': 'Toggle fullscreen',
   },
 
@@ -310,6 +311,7 @@ const TRANSLATIONS = {
     'prompt.comment': 'Kommentar (optional):',
     'player.ruler.title': 'Lineal ein/aus',
     'player.ping.title': 'Ping – DM auf Ort aufmerksam machen (Shift+Klick auf Karte)',
+    'player.follow_dm.title': 'Zurück zur DM-Ansicht',
     'player.fullscreen.title': 'Vollbild ein/aus',
   },
 
@@ -457,6 +459,7 @@ const TRANSLATIONS = {
     'prompt.comment': 'Commentaire (optionnel) :',
     'player.ruler.title': 'Activer/désactiver la règle',
     'player.ping.title': 'Ping — signaler un emplacement au MJ (Maj+clic sur la carte)',
+    'player.follow_dm.title': 'Retour à la vue du MJ',
     'player.fullscreen.title': 'Plein écran',
   },
 
@@ -604,6 +607,7 @@ const TRANSLATIONS = {
     'prompt.comment': 'Commento (opzionale):',
     'player.ruler.title': 'Attiva/disattiva righello',
     'player.ping.title': 'Ping — segnala una posizione al MG (Shift+clic sulla mappa)',
+    'player.follow_dm.title': 'Torna alla vista del MG',
     'player.fullscreen.title': 'Schermo intero',
   },
 };

@@ -58,7 +58,7 @@ html, body {
 .connection-status.connected { color: #4caf50; }
 .connection-status.error     { color: #e08888; }
 
-#ruler-btn, #fullscreen-btn {
+#ruler-btn, #fullscreen-btn, #follow-dm-btn {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text);
@@ -69,8 +69,9 @@ html, body {
   flex-shrink: 0;
 }
 
-#ruler-btn:hover,   #fullscreen-btn:hover { border-color: var(--accent); color: var(--accent); }
+#ruler-btn:hover,   #fullscreen-btn:hover, #follow-dm-btn:hover { border-color: var(--accent); color: var(--accent); }
 #ruler-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(201,168,76,0.15); }
+#follow-dm-btn { border-color: var(--accent); color: var(--accent); background: rgba(201,168,76,0.15); }
 
 /* ===== Canvas container ===== */
 #canvas-container {

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self';" />
+  <title>FreeTT Server – Anmelden</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: #1a1a2e; color: #e8e8f0; font-family: system-ui, sans-serif;
+    }
+    form {
+      background: #23233a; padding: 32px 36px; border-radius: 10px; width: 280px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.4); text-align: center;
+    }
+    h1 { font-size: 20px; margin: 0 0 20px; }
+    input {
+      width: 100%; box-sizing: border-box; padding: 10px 12px; margin-bottom: 14px;
+      border-radius: 6px; border: 1px solid #444; background: #14141f; color: #fff; font-size: 15px;
+    }
+    button {
+      width: 100%; padding: 10px 12px; border-radius: 6px; border: none;
+      background: #c9a84c; color: #1a1a2e; font-weight: 600; font-size: 15px; cursor: pointer;
+    }
+    button:hover { background: #ddbc5f; }
+    #error { color: #e08888; font-size: 13px; min-height: 18px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <form id="login-form">
+    <h1>⚔ FreeTT Server</h1>
+    <input id="password" type="password" placeholder="DM-Passwort" autocomplete="current-password" autofocus />
+    <button type="submit">Anmelden</button>
+    <div id="error"></div>
+  </form>
+  <script>
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('error');
+      errorEl.textContent = '';
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        });
+        if (res.ok) {
+          location.href = '/';
+        } else {
+          errorEl.textContent = 'Falsches Passwort.';
+        }
+      } catch {
+        errorEl.textContent = 'Verbindung fehlgeschlagen.';
+      }
+    });
+  </script>
+</body>
+</html>
