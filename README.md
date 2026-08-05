@@ -32,11 +32,16 @@ Then open `http://localhost:3456`, log in with the password, and start playing. 
 
 Environment variables:
 
-| Variable                | Required | Default | Purpose                                                    |
-|--------------------------|----------|---------|-------------------------------------------------------------|
-| `DM_PASSWORD`             | yes      | —       | Password to log in as DM                                    |
-| `PORT`                    | no       | `3456`  | HTTP/WebSocket port                                          |
-| `YOUTUBE_INNERTUBE_KEY`   | no       | —       | Enables the in-app YouTube music search. Without it, search returns no results (everything else still works). This is **not a private credential** — it's YouTube's own public web-client key, the same one `youtube.com` embeds in every page load (view-source on any YouTube page and search for `INNERTUBE_API_KEY` to find the current value). Deliberately not hardcoded or pasted here so it doesn't read as a leaked secret to scanners. |
+| Variable      | Required | Default | Purpose                                   |
+|---------------|----------|---------|--------------------------------------------|
+| `DM_PASSWORD` | yes      | —       | Password to log in as DM                   |
+| `PORT`        | no       | `3456`  | HTTP/WebSocket port                        |
+
+The in-app YouTube music search (`server/routes/youtube.js`) uses YouTube's own
+public "innertube" web-client key, hardcoded the same way the original desktop
+app did. It is not a private credential of this project — it's the same key
+`youtube.com` embeds in every page load — so GitHub's secret scanning push
+protection is disabled for this repo to allow it (Settings → Code security).
 
 ---
 
@@ -47,7 +52,6 @@ Environment variables:
    ```
    DM_PASSWORD=<a long random string>
    PORT=3456
-   YOUTUBE_INNERTUBE_KEY=<optional, see below>
    ```
 3. Create a systemd unit `/etc/systemd/system/freett-server.service`:
    ```ini
