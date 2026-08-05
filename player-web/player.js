@@ -271,6 +271,15 @@ function drawTokens() {
     ctx.shadowBlur  = 4;
     ctx.fillText(t.name, cx, cy + r + 3);
     ctx.shadowBlur = 0;
+
+    if (t.status) {
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = '#e8c86a';
+      ctx.shadowColor = '#000000';
+      ctx.shadowBlur = 3;
+      ctx.fillText(t.status, cx, cy + r + 18);
+      ctx.shadowBlur = 0;
+    }
   }
 
   // Draw pins

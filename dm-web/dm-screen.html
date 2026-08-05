@@ -23,6 +23,9 @@
       <button id="btn-tool-ruler" class="btn btn-tool" data-tool="ruler" data-i18n-title="tool.ruler.title" title="Entfernung messen">
         <span class="tool-icon">📏</span> <span data-i18n="tool.ruler">Lineal</span>
       </button>
+      <button id="btn-tool-neutral" class="btn btn-tool" data-tool="neutral" data-i18n-title="tool.neutral.title" title="Nur Token bewegen, kein Nebel/Lineal">
+        <span class="tool-icon">🖱</span> <span data-i18n="tool.neutral">Neutral</span>
+      </button>
       <div id="ruler-status" class="ruler-status" style="display:none">
         <span id="ruler-status-text"></span>
         <button id="btn-recalibrate" class="btn btn-secondary" data-i18n="btn.recalibrate">Kalibrieren</button>
@@ -158,6 +161,8 @@
       </div>
     </div>
 
+    <div id="resizer-left" class="panel-resizer" title="Seitenleiste breite ziehen"></div>
+
     <!-- Canvas area -->
     <div id="canvas-container" class="canvas-container">
       <div id="drop-zone" class="drop-zone">
@@ -185,6 +190,8 @@
       <!-- Help button — lower left -->
       <button id="btn-help-dm" class="help-btn help-btn-dm" title="Help / Hilfe">?</button>
     </div>
+
+    <div id="resizer-right" class="panel-resizer" title="Seitenleiste breite ziehen"></div>
 
     <!-- Combat Tracker Sidebar (right) -->
     <div id="combat-deck">

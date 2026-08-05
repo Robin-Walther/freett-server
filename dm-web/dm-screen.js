@@ -190,6 +190,36 @@ function resizeCanvases() {
 window.addEventListener('resize', resizeCanvases);
 resizeCanvases();
 
+// ===== Sidebar resizer =====
+function initPanelResizer(handle, panel, { min, max, invert = false }) {
+  let startX = 0;
+  let startWidth = 0;
+
+  function onMouseMove(e) {
+    const dx = e.clientX - startX;
+    const delta = invert ? -dx : dx;
+    panel.style.width = `${Math.min(max, Math.max(min, startWidth + delta))}px`;
+    resizeCanvases();
+  }
+  function onMouseUp() {
+    handle.classList.remove('resizing');
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  }
+
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    startX = e.clientX;
+    startWidth = panel.getBoundingClientRect().width;
+    handle.classList.add('resizing');
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  });
+}
+
+initPanelResizer(document.getElementById('resizer-left'), document.getElementById('image-deck'), { min: 120, max: 420 });
+initPanelResizer(document.getElementById('resizer-right'), document.getElementById('combat-deck'), { min: 140, max: 450, invert: true });
+
 // ===== Media helpers =====
 function getSlotMedia(slot) {
   return slot.isVideo ? slot.video : slot.image;
@@ -369,6 +399,9 @@ function drawCursor(screenX, screenY) {
     return;
   }
   if (state.tool === 'grid-align') {
+    return;
+  }
+  if (state.tool === 'neutral') {
     return;
   }
 
@@ -649,6 +682,7 @@ canvasImage.addEventListener('mousedown', (e) => {
     state.rulerCurrentY = e.offsetY;
     return;
   }
+  if (state.tool === 'neutral') return;
   state.isPainting = true;
   paintFog(e.offsetX, e.offsetY);
 });
@@ -990,6 +1024,16 @@ function drawTokensLayer(slot) {
     ctxTokens.shadowBlur = 4;
     ctxTokens.fillText(c.name, sc.x, sc.y + r + 3);
     ctxTokens.shadowBlur = 0;
+
+    // Status label below the name
+    if (c.status) {
+      ctxTokens.font = '11px sans-serif';
+      ctxTokens.fillStyle = '#e8c86a';
+      ctxTokens.shadowColor = '#000000';
+      ctxTokens.shadowBlur = 3;
+      ctxTokens.fillText(c.status, sc.x, sc.y + r + 18);
+      ctxTokens.shadowBlur = 0;
+    }
   }
 
   // Draw map pins
@@ -1154,6 +1198,7 @@ function sendTokensSync() {
         tokenUrl: c.tokenPath || null,
         tokenX: c.tokenX, tokenY: c.tokenY,
         tokenSize: c.tokenSize || 40,
+        status: c.status || null,
         controllerId: gp?.uuid ?? null,
       };
     });
@@ -1184,6 +1229,53 @@ function copyCombatantToSlot(combatant, targetSlot) {
     type: combatant.type,
     hp: combatant.hp,
     maxHp: combatant.maxHp,
+    stamina: combatant.stamina ?? null,
+    maxStamina: combatant.maxStamina ?? null,
+    tokenPath: combatant.tokenPath ?? null,
+    tokenImg: null,
+    tokenX: null,
+    tokenY: null,
+    tokenSize: combatant.tokenSize ?? 40,
+    status: combatant.status ?? '',
+    globalPlayerId: combatant.globalPlayerId ?? null,
+  };
+  if (copy.tokenPath) {
+    const img = new Image();
+    img.src = copy.tokenPath;
+    img.onload = () => { copy.tokenImg = img; if (targetSlot.id === activeSlotId) { rebuildCombatUI(); renderAll(targetSlot); } };
+  }
+  targetSlot.combatants.push(copy);
+  if (targetSlot.id === activeSlotId) rebuildCombatUI();
+}
+
+// Finds the next free "<name> N" suffix among the target scene's combatants, so
+// duplicating "Goblin" repeatedly yields "Goblin 2", "Goblin 3", etc.
+function nextDuplicateName(targetSlot, baseName) {
+  const base = baseName.replace(/\s+\d+$/, '').trim();
+  const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`^${escaped}(?:\\s+(\\d+))?$`);
+  let maxNum = 0;
+  let foundBase = false;
+  for (const c of targetSlot.combatants) {
+    const m = re.exec(c.name);
+    if (m) {
+      foundBase = true;
+      const n = m[1] ? parseInt(m[1], 10) : 1;
+      if (n > maxNum) maxNum = n;
+    }
+  }
+  return foundBase ? `${base} ${maxNum + 1}` : base;
+}
+
+function duplicateCombatantInSlot(combatant, targetSlot) {
+  const copy = {
+    id: ++combatIdCounter,
+    name: nextDuplicateName(targetSlot, combatant.name),
+    type: combatant.type,
+    hp: combatant.hp,
+    maxHp: combatant.maxHp,
+    stamina: combatant.stamina ?? null,
+    maxStamina: combatant.maxStamina ?? null,
     tokenPath: combatant.tokenPath ?? null,
     tokenImg: null,
     tokenX: null,
@@ -1204,6 +1296,7 @@ function copyCombatantToSlot(combatant, targetSlot) {
 function showCopyMenu(combatant, buttonEl) {
   closeCopyMenu();
 
+  const activeSlot = getActiveSlot();
   const otherSlots = deck.filter(s => s.id !== activeSlotId);
   const menu = document.createElement('div');
   menu.className = 'copy-scene-menu';
@@ -1212,6 +1305,22 @@ function showCopyMenu(combatant, buttonEl) {
   header.className = 'copy-scene-menu-header';
   header.textContent = t('combat.copy.header');
   menu.appendChild(header);
+
+  if (activeSlot) {
+    const currentItem = document.createElement('div');
+    currentItem.className = 'copy-scene-menu-item';
+    currentItem.textContent = t('combat.copy.current_scene');
+    currentItem.title = t('combat.copy.current_scene');
+    currentItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      duplicateCombatantInSlot(combatant, activeSlot);
+      closeCopyMenu();
+    });
+    menu.appendChild(currentItem);
+    const divider = document.createElement('div');
+    divider.className = 'copy-scene-menu-divider';
+    menu.appendChild(divider);
+  }
 
   if (otherSlots.length === 0) {
     const empty = document.createElement('div');
@@ -1259,6 +1368,41 @@ async function openTokenDialog(combatant) {
     rebuildCombatUI();
     renderAll();
   };
+}
+
+// Player combatants are per-scene copies of a global player (see globalPlayers below);
+// their token image must be set through the global player so it propagates to every
+// scene, not just the one currently open. Monsters have no global identity, so they
+// keep the plain per-combatant dialog.
+function openCombatantTokenDialog(combatant) {
+  if (combatant.type === 'player' && combatant.globalPlayerId != null) {
+    const gp = globalPlayers.find(p => p.id === combatant.globalPlayerId);
+    if (gp) { openGlobalPlayerTokenDialog(gp); return; }
+  }
+  openTokenDialog(combatant);
+}
+
+// Stamina, like the token image, is a property of the player (not the scene) once a
+// combatant is linked to a global player — updating it here must propagate to every
+// scene's copy. Monsters have no global identity, so their stamina stays scene-local
+// (same as HP).
+function setCombatantStamina(c, stamina, maxStamina) {
+  const clampedMax = Math.max(0, maxStamina || 0);
+  const clampedCur = Math.max(0, Math.min(clampedMax, stamina || 0));
+  c.stamina = clampedCur;
+  c.maxStamina = clampedMax;
+  if (c.globalPlayerId != null) {
+    const gp = globalPlayers.find(p => p.id === c.globalPlayerId);
+    if (gp) {
+      gp.stamina = clampedCur;
+      gp.maxStamina = clampedMax;
+      for (const slot of deck) {
+        const other = slot.combatants.find(oc => oc.globalPlayerId === c.globalPlayerId);
+        if (other) { other.stamina = clampedCur; other.maxStamina = clampedMax; }
+      }
+    }
+  }
+  return { stamina: clampedCur, maxStamina: clampedMax };
 }
 
 // ===== Combat Tracker =====
@@ -1343,7 +1487,7 @@ function rebuildCombatUI() {
       });
       thumb.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        openTokenDialog(c);
+        openCombatantTokenDialog(c);
       });
       tokenSlot.appendChild(thumb);
     } else {
@@ -1353,7 +1497,7 @@ function rebuildCombatUI() {
       tokenBtn.title = t('btn.load_token.title');
       tokenBtn.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        openTokenDialog(c);
+        openCombatantTokenDialog(c);
       });
       tokenSlot.appendChild(tokenBtn);
     }
@@ -1416,6 +1560,65 @@ function rebuildCombatUI() {
       item.appendChild(hpRow);
     }
 
+    // --- Stamina row (all combatants; players sync across scenes, monsters stay local) ---
+    const staminaRow = document.createElement('div');
+    staminaRow.className = 'combat-item-hp';
+
+    const staminaIcon = document.createElement('span');
+    staminaIcon.className = 'combat-stamina-icon';
+    staminaIcon.textContent = '⚡';
+
+    const staminaMinusBtn = document.createElement('button');
+    staminaMinusBtn.className = 'combat-hp-btn';
+    staminaMinusBtn.textContent = '−';
+    staminaMinusBtn.title = t('combat.stamina.decrease.title');
+
+    const staminaInput = document.createElement('input');
+    staminaInput.type = 'number';
+    staminaInput.className = 'combat-hp-input';
+    staminaInput.value = c.stamina ?? 0;
+    staminaInput.min = 0;
+    staminaInput.max = c.maxStamina ?? 0;
+    staminaInput.title = t('combat.stamina.current.title');
+
+    const staminaSep = document.createElement('span');
+    staminaSep.className = 'combat-hp-sep';
+    staminaSep.textContent = '/';
+
+    const staminaMaxInput = document.createElement('input');
+    staminaMaxInput.type = 'number';
+    staminaMaxInput.className = 'combat-hp-input';
+    staminaMaxInput.value = c.maxStamina ?? 0;
+    staminaMaxInput.min = 0;
+    staminaMaxInput.title = t('combat.stamina.max.title');
+
+    const staminaPlusBtn = document.createElement('button');
+    staminaPlusBtn.className = 'combat-hp-btn';
+    staminaPlusBtn.textContent = '+';
+    staminaPlusBtn.title = t('combat.stamina.increase.title');
+
+    staminaInput.addEventListener('change', () => {
+      const { stamina } = setCombatantStamina(c, parseInt(staminaInput.value, 10) || 0, c.maxStamina ?? 0);
+      staminaInput.value = stamina;
+    });
+    staminaMaxInput.addEventListener('change', () => {
+      const { stamina, maxStamina } = setCombatantStamina(c, c.stamina ?? 0, parseInt(staminaMaxInput.value, 10) || 0);
+      staminaInput.value = stamina;
+      staminaInput.max = maxStamina;
+      staminaMaxInput.value = maxStamina;
+    });
+    staminaMinusBtn.addEventListener('click', () => {
+      const { stamina } = setCombatantStamina(c, (c.stamina ?? 0) - 1, c.maxStamina ?? 0);
+      staminaInput.value = stamina;
+    });
+    staminaPlusBtn.addEventListener('click', () => {
+      const { stamina } = setCombatantStamina(c, (c.stamina ?? 0) + 1, c.maxStamina ?? 0);
+      staminaInput.value = stamina;
+    });
+
+    staminaRow.append(staminaIcon, staminaMinusBtn, staminaInput, staminaSep, staminaMaxInput, staminaPlusBtn);
+    item.appendChild(staminaRow);
+
     // --- Status row (all combatants) ---
     const statusRow = document.createElement('div');
     statusRow.className = 'combat-item-status';
@@ -1424,7 +1627,11 @@ function rebuildCombatUI() {
     statusInput.className = 'combat-status-input';
     statusInput.placeholder = t('combat.status.placeholder');
     statusInput.value = c.status || '';
-    statusInput.addEventListener('input', () => { c.status = statusInput.value; });
+    statusInput.addEventListener('input', () => {
+      c.status = statusInput.value;
+      renderAll();
+      sendTokensSync();
+    });
     statusRow.appendChild(statusInput);
     item.appendChild(statusRow);
 
@@ -1490,7 +1697,7 @@ function confirmAddCombatant() {
   const slot = getActiveSlot();
   if (!slot) { closeCombatAddOverlay(); return; }
   const maxHp = combatAddType === 'monster' ? Math.max(1, parseInt(combatAddMaxHp.value, 10) || 1) : null;
-  slot.combatants.push({ id: ++combatIdCounter, name, type: combatAddType, hp: maxHp, maxHp, tokenPath: null, tokenImg: null, tokenX: null, tokenY: null, tokenSize: 40, status: '' });
+  slot.combatants.push({ id: ++combatIdCounter, name, type: combatAddType, hp: maxHp, maxHp, stamina: null, maxStamina: null, tokenPath: null, tokenImg: null, tokenX: null, tokenY: null, tokenSize: 40, status: '' });
   closeCombatAddOverlay();
   rebuildCombatUI();
 }
@@ -1536,6 +1743,7 @@ async function saveSession() {
         gridOpacity: slot.gridOpacity ?? 15,
         combatants: slot.combatants.map(c => ({
           id: c.id, name: c.name, type: c.type, hp: c.hp, maxHp: c.maxHp,
+          stamina: c.stamina ?? null, maxStamina: c.maxStamina ?? null,
           tokenPath: c.tokenPath ?? null,
           tokenX: c.tokenX ?? null,
           tokenY: c.tokenY ?? null,
@@ -1552,7 +1760,7 @@ async function saveSession() {
     version: 2,
     savedAt: new Date().toISOString(),
     activeSlotIndex: activeIndex,
-    globalPlayers: globalPlayers.map(gp => ({ id: gp.id, name: gp.name, tokenPath: gp.tokenPath ?? null, uuid: gp.uuid ?? null })),
+    globalPlayers: globalPlayers.map(gp => ({ id: gp.id, name: gp.name, tokenPath: gp.tokenPath ?? null, stamina: gp.stamina ?? null, maxStamina: gp.maxStamina ?? null, uuid: gp.uuid ?? null })),
     deck: slots,
   };
   const result = await window.electronAPI.saveSession(data);
@@ -1666,7 +1874,7 @@ async function loadSession() {
   globalPlayerIdCounter = 0;
   if (Array.isArray(data.globalPlayers) && data.globalPlayers.length > 0) {
     for (const saved of data.globalPlayers) {
-      const gp = { id: saved.id, name: saved.name, tokenPath: saved.tokenPath ?? null, tokenImg: null, uuid: saved.uuid ?? crypto.randomUUID() };
+      const gp = { id: saved.id, name: saved.name, tokenPath: saved.tokenPath ?? null, tokenImg: null, stamina: saved.stamina ?? null, maxStamina: saved.maxStamina ?? null, uuid: saved.uuid ?? crypto.randomUUID() };
       globalPlayers.push(gp);
       if (gp.tokenPath) {
         const img = new Image();
@@ -1887,6 +2095,8 @@ function addGlobalPlayerToSlot(gp, slot) {
     type: 'player',
     hp: null,
     maxHp: null,
+    stamina: gp.stamina ?? null,
+    maxStamina: gp.maxStamina ?? null,
     tokenPath: gp.tokenPath,
     tokenImg: gp.tokenImg,
     tokenX: null,
@@ -1898,7 +2108,7 @@ function addGlobalPlayerToSlot(gp, slot) {
 
 function addGlobalPlayer(name) {
   if (!name) return;
-  const gp = { id: ++globalPlayerIdCounter, name, tokenPath: null, tokenImg: null, uuid: crypto.randomUUID() };
+  const gp = { id: ++globalPlayerIdCounter, name, tokenPath: null, tokenImg: null, stamina: null, maxStamina: null, uuid: crypto.randomUUID() };
   globalPlayers.push(gp);
   for (const slot of deck) addGlobalPlayerToSlot(gp, slot);
   rebuildPlayersUI();
